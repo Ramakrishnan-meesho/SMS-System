@@ -10,6 +10,8 @@ import com.meesho.sms_sender.dto.EchoRequest;
 import com.meesho.sms_sender.dto.EchoResponse;
 import com.meesho.sms_sender.service.EchoService;
 
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/v1")
 public class EchoController {
@@ -20,7 +22,7 @@ public class EchoController {
     }
 
     @PostMapping("/echo")
-    public ResponseEntity<EchoResponse> echo(@RequestBody EchoRequest echoReq){
+    public ResponseEntity<EchoResponse> echo(@Valid @RequestBody EchoRequest echoReq){
         return ResponseEntity.ok(echoService.echo(echoReq));
     }
 }
