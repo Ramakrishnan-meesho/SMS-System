@@ -11,10 +11,10 @@ import (
 )
 
 type Handler struct {
-	store *store.MemoryStore
+	store store.Store
 }
 
-func NewHandler(s *store.MemoryStore) *Handler {
+func NewHandler(s store.Store) *Handler {
 	return &Handler{store: s}
 }
 
@@ -97,4 +97,39 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) GetUserMessages(w http.ResponseWriter, r *http.Request) {
+	// Extract user_id from URL path: /v1/user/{user_id}/messages
+	// Path will be like: /v1/user/user123/messages
+	path := r.URL.Path
+	
+	// Validate path format: /v1/user/{user_id}/messages
+	prefix := "/v1/user/"
+	suffix := "/messages"
+	
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid URL path")
+		return
+	}
+	
+	// Extract userID: remove prefix and suffix
+	userID := strings.TrimPrefix(path, prefix)
+	userID = strings.TrimSuffix(userID, suffix)
+	userID = strings.TrimSpace(userID)
+	
+	// Validate userID is not empty and doesn't contain slashes (to prevent path traversal)
+	if userID == "" || strings.Contains(userID, "/") {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid user_id")
+		return
+	}
+	
+	messages, err := h.store.FindByUserID(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "could not retrieve messages")
+		return
+	}
+	
+	// Return empty array if no messages found (not an error)
+	writeJSON(w, http.StatusOK, messages)
 }
