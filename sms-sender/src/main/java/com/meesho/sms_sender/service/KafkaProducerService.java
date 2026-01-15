@@ -1,5 +1,6 @@
 package com.meesho.sms_sender.service;
 
+import com.meesho.sms_sender.config.KafkaConfig;
 import com.meesho.sms_sender.dto.SmsEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
 public class KafkaProducerService {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaProducerService.class);
-    private static final String TOPIC_NAME = "sms-events";
+    private static final String TOPIC_NAME = KafkaConfig.SMS_EVENTS_TOPIC;
 
     private final KafkaTemplate<String, SmsEvent> kafkaTemplate;
 
@@ -37,31 +38,31 @@ public class KafkaProducerService {
             throw new IllegalArgumentException("SMS event cannot be null");
         }
 
-        logger.info("Sending SMS event to Kafka topic '{}': userId={}, status={}", 
-                   TOPIC_NAME, event.getUserId(), event.getStatus());
+        logger.info("Sending SMS event to Kafka topic '{}': correlationId={}, phoneNumber={}, status={}", 
+                   TOPIC_NAME, event.getCorrelationId(), event.getPhoneNumber(), event.getStatus());
 
         try {
             // Send event to Kafka topic
-            // Using userId as the key for partitioning (messages with same userId go to same partition)
+            // Using phoneNumber as the key for partitioning (messages with same phoneNumber go to same partition)
             CompletableFuture<SendResult<String, SmsEvent>> future = 
-                kafkaTemplate.send(TOPIC_NAME, event.getUserId(), event);
+                kafkaTemplate.send(TOPIC_NAME, event.getPhoneNumber(), event);
 
             // Handle success and failure asynchronously
             future.whenComplete((result, exception) -> {
                 if (exception == null) {
-                    logger.info("Successfully sent SMS event to Kafka: userId={}, offset={}", 
-                               event.getUserId(), 
+                    logger.info("Successfully sent SMS event to Kafka: correlationId={}, phoneNumber={}, offset={}", 
+                               event.getCorrelationId(), event.getPhoneNumber(), 
                                result.getRecordMetadata().offset());
                 } else {
-                    logger.error("Failed to send SMS event to Kafka: userId={}, error={}", 
-                               event.getUserId(), exception.getMessage(), exception);
+                    logger.error("Failed to send SMS event to Kafka: correlationId={}, phoneNumber={}, error={}", 
+                               event.getCorrelationId(), event.getPhoneNumber(), exception.getMessage(), exception);
                 }
             });
 
             return future;
         } catch (Exception e) {
-            logger.error("Error sending SMS event to Kafka: userId={}, error={}", 
-                        event.getUserId(), e.getMessage(), e);
+            logger.error("Error sending SMS event to Kafka: correlationId={}, phoneNumber={}, error={}", 
+                        event.getCorrelationId(), event.getPhoneNumber(), e.getMessage(), e);
             throw new RuntimeException("Failed to send SMS event to Kafka", e);
         }
     }

@@ -19,3 +19,16 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false
+
+# Async processing configuration
+sms:
+  async:
+    third-party-api:
+      core-pool-size: 5
+      max-pool-size: 10
+      queue-capacity: 100
+      keep-alive-seconds: 60
+  # Third-party API simulation configuration
+  third-party-api:
+    success-rate: 1.0 # 1.0 = 100% success (all messages succeed), 0.5 = 50% success
+    delay-ms: 10 # Simulated network delay in milliseconds (reduced from 50ms for faster processing)

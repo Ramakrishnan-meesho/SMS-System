@@ -30,14 +30,14 @@ public class KafkaTestController {
      */
     @PostMapping("/test")
     public ResponseEntity<Map<String, Object>> testKafkaProducer(
-            @RequestParam(required = false, defaultValue = "test-user") String userId,
             @RequestParam(required = false, defaultValue = "1234567890") String phoneNumber,
             @RequestParam(required = false, defaultValue = "Test SMS message") String message,
             @RequestParam(required = false, defaultValue = "SUCCESS") String status) {
 
         // Create test SMS event
+        String correlationId = java.util.UUID.randomUUID().toString();
         SmsEvent event = new SmsEvent();
-        event.setUserId(userId);
+        event.setCorrelationId(correlationId);
         event.setPhoneNumber(phoneNumber);
         event.setText(message);
         event.setStatus(status);

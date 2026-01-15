@@ -9,17 +9,19 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SendSmsResponse {
     /**
-     * Unique request ID (UUID) for tracking the SMS request
+     * Correlation ID for tracking the SMS request across services
+     * This ID is used to correlate the request with Kafka events and logs
      */
-    private String requestId;
+    private String correlationId;
 
     /**
-     * SMS delivery status: "SUCCESS" or "FAIL" from the third-party SMS API
+     * SMS delivery status: "PENDING" initially, will be updated asynchronously
+     * Possible values: "PENDING", "SUCCESS", "FAIL"
      */
     private String status;
 
     /**
-     * Timestamp when the request was processed (milliseconds since epoch)
+     * Timestamp when the request was received (milliseconds since epoch)
      */
     private long timestamp;
 }

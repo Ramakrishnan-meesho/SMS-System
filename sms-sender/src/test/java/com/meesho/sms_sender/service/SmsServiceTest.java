@@ -55,8 +55,8 @@ class SmsServiceTest {
 
         // Assert
         assertNotNull(response);
-        assertNotNull(response.getRequestId());
-        assertTrue(response.getStatus().equals("SUCCESS") || response.getStatus().equals("FAIL"));
+        assertNotNull(response.getCorrelationId());
+        assertEquals("PENDING", response.getStatus());
         assertTrue(response.getTimestamp() > 0);
         
         // Verify interactions
@@ -140,7 +140,6 @@ class SmsServiceTest {
 
         // Assert - Verify SmsEvent was created with correct fields
         verify(kafkaProducerService, times(1)).sendSmsEvent(argThat(event -> 
-            event.getUserId().equals("1234567890") &&
             event.getPhoneNumber().equals("1234567890") &&
             event.getText().equals("Hello World") &&
             (event.getStatus().equals("SUCCESS") || event.getStatus().equals("FAIL")) &&
@@ -164,9 +163,9 @@ class SmsServiceTest {
         SendSmsResponse response = smsService.sendSms(validRequest);
 
         // Assert
-        assertNotNull(response.getRequestId());
-        assertFalse(response.getRequestId().isEmpty());
+        assertNotNull(response.getCorrelationId());
+        assertFalse(response.getCorrelationId().isEmpty());
         // UUID format check (basic validation)
-        assertTrue(response.getRequestId().length() > 20);
+        assertTrue(response.getCorrelationId().length() > 20);
     }
 }

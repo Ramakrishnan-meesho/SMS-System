@@ -7,18 +7,19 @@ import lombok.NoArgsConstructor;
 /**
  * DTO representing an SMS event to be sent to Kafka.
  * This structure matches the Go service's Message model for seamless integration.
+ * Uses phoneNumber as the primary identifier.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class SmsEvent {
     /**
-     * User ID who sent/received the SMS
+     * Correlation ID for tracking the SMS request across services
      */
-    private String userId;
+    private String correlationId;
 
     /**
-     * Phone number (10 digits)
+     * Phone number (10 digits) - used as primary identifier
      */
     private String phoneNumber;
 
