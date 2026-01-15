@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -53,10 +54,10 @@ func NewMongoStore(connectionString, databaseName, collectionName string) (*Mong
 	database := client.Database(databaseName)
 	collection := database.Collection(collectionName)
 
-	// Create index on userId for faster queries
+	// Create index on phoneNumber for faster queries
 	indexModel := mongo.IndexModel{
-		Keys:    bson.D{{Key: "userId", Value: 1}},
-		Options: options.Index().SetName("userId_idx"),
+		Keys:    bson.D{{Key: "phoneNumber", Value: 1}},
+		Options: options.Index().SetName("phoneNumber_idx"),
 	}
 	_, err = collection.Indexes().CreateOne(ctx, indexModel)
 	if err != nil {
@@ -84,12 +85,43 @@ func (s *MongoStore) Save(msg models.Message) (models.Message, error) {
 	return msg, nil
 }
 
-// FindByUserID retrieves all messages for a specific user from MongoDB.
-func (s *MongoStore) FindByUserID(userID string) ([]models.Message, error) {
+// SaveBatch stores multiple messages in MongoDB using bulk insert for better performance.
+func (s *MongoStore) SaveBatch(msgs []models.Message) (int, error) {
+	if len(msgs) == 0 {
+		return 0, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Convert to []interface{} for InsertMany
+	documents := make([]interface{}, len(msgs))
+	for i := range msgs {
+		documents[i] = msgs[i]
+	}
+
+	// Use ordered=false to continue inserting even if some documents fail
+	opts := options.InsertMany().SetOrdered(false)
+	result, err := s.collection.InsertMany(ctx, documents, opts)
+	if err != nil {
+		// Check if it's a bulk write error with partial success
+		var bulkErr mongo.BulkWriteException
+		if errors.As(err, &bulkErr) {
+			// Return count of successfully inserted documents
+			return len(result.InsertedIDs), fmt.Errorf("partial batch insert: %w", err)
+		}
+		return 0, fmt.Errorf("failed to insert batch: %w", err)
+	}
+
+	return len(result.InsertedIDs), nil
+}
+
+// FindByPhoneNumber retrieves all messages for a specific phone number from MongoDB.
+func (s *MongoStore) FindByPhoneNumber(phoneNumber string) ([]models.Message, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	filter := bson.M{"userId": userID}
+	filter := bson.M{"phoneNumber": phoneNumber}
 
 	cursor, err := s.collection.Find(ctx, filter)
 	if err != nil {

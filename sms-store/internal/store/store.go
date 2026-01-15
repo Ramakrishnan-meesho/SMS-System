@@ -10,9 +10,13 @@ type Store interface {
 	// The message should include an ID (can be generated or provided).
 	Save(msg models.Message) (models.Message, error)
 
-	// FindByUserID retrieves all messages for a specific user.
+	// SaveBatch stores multiple messages in a single operation for better performance.
+	// Returns the number of successfully saved messages and any error.
+	SaveBatch(msgs []models.Message) (int, error)
+
+	// FindByPhoneNumber retrieves all messages for a specific phone number.
 	// Returns an empty slice if no messages are found (not an error).
-	FindByUserID(userID string) ([]models.Message, error)
+	FindByPhoneNumber(phoneNumber string) ([]models.Message, error)
 
 	// List retrieves all messages (used for testing/debugging).
 	// Returns an empty slice if no messages are found.

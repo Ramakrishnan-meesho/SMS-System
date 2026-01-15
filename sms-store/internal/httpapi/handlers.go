@@ -42,7 +42,6 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 }
 
 type createMessageRequest struct {
-	UserID      string `json:"userId"`
 	PhoneNumber string `json:"phoneNumber"`
 	Text        string `json:"text"`
 }
@@ -54,14 +53,9 @@ func (h *Handler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.UserID = strings.TrimSpace(req.UserID)
 	req.PhoneNumber = strings.TrimSpace(req.PhoneNumber)
 	req.Text = strings.TrimSpace(req.Text)
 
-	if req.UserID == "" {
-		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "userId is required")
-		return
-	}
 	if req.PhoneNumber == "" {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "phoneNumber is required")
 		return
@@ -73,7 +67,6 @@ func (h *Handler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 
 	msg := models.Message{
 		ID:          "msg-" + time.Now().Format("20060102150405.000000000"),
-		UserID:      req.UserID,
 		PhoneNumber: req.PhoneNumber,
 		Text:        req.Text,
 		Status:      "RECEIVED",
@@ -100,11 +93,11 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetUserMessages(w http.ResponseWriter, r *http.Request) {
-	// Extract user_id from URL path: /v1/user/{user_id}/messages
-	// Path will be like: /v1/user/user123/messages
+	// Extract phoneNumber from URL path: /v1/user/{phoneNumber}/messages
+	// Path will be like: /v1/user/1234567890/messages
 	path := r.URL.Path
 	
-	// Validate path format: /v1/user/{user_id}/messages
+	// Validate path format: /v1/user/{phoneNumber}/messages
 	prefix := "/v1/user/"
 	suffix := "/messages"
 	
@@ -113,18 +106,18 @@ func (h *Handler) GetUserMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Extract userID: remove prefix and suffix
-	userID := strings.TrimPrefix(path, prefix)
-	userID = strings.TrimSuffix(userID, suffix)
-	userID = strings.TrimSpace(userID)
+	// Extract phoneNumber: remove prefix and suffix
+	phoneNumber := strings.TrimPrefix(path, prefix)
+	phoneNumber = strings.TrimSuffix(phoneNumber, suffix)
+	phoneNumber = strings.TrimSpace(phoneNumber)
 	
-	// Validate userID is not empty and doesn't contain slashes (to prevent path traversal)
-	if userID == "" || strings.Contains(userID, "/") {
-		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid user_id")
+	// Validate phoneNumber is not empty and doesn't contain slashes (to prevent path traversal)
+	if phoneNumber == "" || strings.Contains(phoneNumber, "/") {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid phoneNumber")
 		return
 	}
 	
-	messages, err := h.store.FindByUserID(userID)
+	messages, err := h.store.FindByPhoneNumber(phoneNumber)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "could not retrieve messages")
 		return

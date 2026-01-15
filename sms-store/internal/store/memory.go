@@ -34,13 +34,13 @@ func (s *MemoryStore) List() ([]models.Message, error) {
 	return out, nil
 }
 
-func (s *MemoryStore) FindByUserID(userID string) ([]models.Message, error) {
+func (s *MemoryStore) FindByPhoneNumber(phoneNumber string) ([]models.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var result []models.Message
 	for _, msg := range s.messages {
-		if msg.UserID == userID {
+		if msg.PhoneNumber == phoneNumber {
 			result = append(result, msg)
 		}
 	}
@@ -54,4 +54,12 @@ func (s *MemoryStore) DeleteAll() (int64, error) {
 	count := int64(len(s.messages))
 	s.messages = make([]models.Message, 0)
 	return count, nil
+}
+
+func (s *MemoryStore) SaveBatch(msgs []models.Message) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.messages = append(s.messages, msgs...)
+	return len(msgs), nil
 }
