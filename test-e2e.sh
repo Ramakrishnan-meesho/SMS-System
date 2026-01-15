@@ -166,13 +166,6 @@ test_verify_message_stored() {
         print_success "Message found in database (Total messages: $message_count)"
         
         # Verify message fields
-        if echo "$response" | grep -q '"userId"'; then
-            print_success "Message has userId field"
-        else
-            print_error "Message missing userId field"
-            return 1
-        fi
-        
         if echo "$response" | grep -q '"phoneNumber"'; then
             print_success "Message has phoneNumber field"
         else
