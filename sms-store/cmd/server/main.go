@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"sms-store/internal/httpapi"
+	"sms-store/internal/kafka"
 	"sms-store/internal/store"
 )
 
@@ -35,6 +37,35 @@ func main() {
 
 	// Create handler with MongoDB store
 	h := httpapi.NewHandler(mongoStore)
+
+	// Initialize Kafka consumer
+	kafkaBrokers := getEnv("KAFKA_BROKERS", "localhost:9092")
+	kafkaGroupID := getEnv("KAFKA_GROUP_ID", "sms-store-consumer-group")
+	kafkaTopic := getEnv("KAFKA_TOPIC", "sms-events")
+
+	log.Println("Initializing Kafka consumer...")
+	kafkaConsumer, err := kafka.NewConsumer(
+		strings.Split(kafkaBrokers, ","),
+		kafkaGroupID,
+		kafkaTopic,
+		mongoStore,
+	)
+	if err != nil {
+		log.Fatalf("Failed to create Kafka consumer: %v", err)
+	}
+
+	// Start Kafka consumer in background
+	if err := kafkaConsumer.Start(); err != nil {
+		log.Fatalf("Failed to start Kafka consumer: %v", err)
+	}
+
+	// Ensure Kafka consumer is stopped on shutdown
+	defer func() {
+		log.Println("Stopping Kafka consumer...")
+		if err := kafkaConsumer.Stop(); err != nil {
+			log.Printf("Error stopping Kafka consumer: %v", err)
+		}
+	}()
 
 	mux := http.NewServeMux()
 
@@ -75,12 +106,20 @@ func main() {
 	}
 
 	// Setup graceful shutdown
+	sigint := make(chan os.Signal, 1)
+	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
+
 	go func() {
-		sigint := make(chan os.Signal, 1)
-		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
 		<-sigint
 
 		log.Println("Shutting down server...")
+
+		// Stop Kafka consumer first
+		if err := kafkaConsumer.Stop(); err != nil {
+			log.Printf("Error stopping Kafka consumer: %v", err)
+		}
+
+		// Then close HTTP server
 		if err := server.Close(); err != nil {
 			log.Printf("Error closing server: %v", err)
 		}
@@ -91,6 +130,7 @@ func main() {
 	log.Println("  GET  /ping")
 	log.Println("  GET  /v1/user/{user_id}/messages")
 	log.Println("  POST /messages (testing only)")
+	log.Println("Kafka consumer listening on topic:", kafkaTopic)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
