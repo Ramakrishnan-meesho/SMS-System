@@ -134,6 +134,19 @@ func (s *MongoStore) List() ([]models.Message, error) {
 	return messages, nil
 }
 
+// DeleteAll removes all messages from MongoDB.
+func (s *MongoStore) DeleteAll() (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := s.collection.DeleteMany(ctx, bson.M{})
+	if err != nil {
+		return 0, err
+	}
+
+	return result.DeletedCount, nil
+}
+
 // Close closes the MongoDB connection.
 // Should be called when shutting down the service.
 func (s *MongoStore) Close() error {

@@ -33,3 +33,25 @@ func (s *MemoryStore) List() ([]models.Message, error) {
 	copy(out, s.messages)
 	return out, nil
 }
+
+func (s *MemoryStore) FindByUserID(userID string) ([]models.Message, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var result []models.Message
+	for _, msg := range s.messages {
+		if msg.UserID == userID {
+			result = append(result, msg)
+		}
+	}
+	return result, nil
+}
+
+func (s *MemoryStore) DeleteAll() (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := int64(len(s.messages))
+	s.messages = make([]models.Message, 0)
+	return count, nil
+}

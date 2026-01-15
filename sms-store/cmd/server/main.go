@@ -87,13 +87,15 @@ func main() {
 		h.GetUserMessages(w, r)
 	})
 
-	// POST /messages - Optional endpoint for testing (can be removed later)
+	// POST /messages, GET /messages, DELETE /messages - Optional endpoints for testing
 	mux.HandleFunc("/messages", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			h.CreateMessage(w, r)
 		case http.MethodGet:
 			h.ListMessages(w, r)
+		case http.MethodDelete:
+			h.DeleteAllMessages(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -127,9 +129,11 @@ func main() {
 
 	log.Println("sms-store server started at", addr)
 	log.Println("Available endpoints:")
-	log.Println("  GET  /ping")
-	log.Println("  GET  /v1/user/{user_id}/messages")
-	log.Println("  POST /messages (testing only)")
+	log.Println("  GET    /ping")
+	log.Println("  GET    /v1/user/{user_id}/messages")
+	log.Println("  POST   /messages (testing only)")
+	log.Println("  GET    /messages (testing only)")
+	log.Println("  DELETE /messages (testing only - clears all messages)")
 	log.Println("Kafka consumer listening on topic:", kafkaTopic)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

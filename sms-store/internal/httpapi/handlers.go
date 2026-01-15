@@ -133,3 +133,16 @@ func (h *Handler) GetUserMessages(w http.ResponseWriter, r *http.Request) {
 	// Return empty array if no messages found (not an error)
 	writeJSON(w, http.StatusOK, messages)
 }
+
+func (h *Handler) DeleteAllMessages(w http.ResponseWriter, r *http.Request) {
+	deletedCount, err := h.store.DeleteAll()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "could not delete messages")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message":      "All messages deleted successfully",
+		"deletedCount": deletedCount,
+	})
+}

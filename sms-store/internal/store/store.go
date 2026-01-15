@@ -17,4 +17,8 @@ type Store interface {
 	// List retrieves all messages (used for testing/debugging).
 	// Returns an empty slice if no messages are found.
 	List() ([]models.Message, error)
+
+	// DeleteAll removes all messages from the store.
+	// Returns the number of deleted messages and any error.
+	DeleteAll() (int64, error)
 }
