@@ -29,16 +29,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
-        ErrorResponse resp = new ErrorResponse(
-                "INTERNAL_ERROR",
-                "Something went wrong",
-                Map.of("reason", ex.getClass().getSimpleName()),
-                Instant.now()
-        );
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
-    }
 
     @ExceptionHandler(NoteNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NoteNotFoundException ex) {
@@ -49,6 +39,51 @@ public class GlobalExceptionHandler {
                 Instant.now()
         );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(resp);
+    }
+
+    @ExceptionHandler(UserBlockedException.class)
+    public ResponseEntity<ErrorResponse> handleUserBlocked(UserBlockedException ex) {
+        ErrorResponse resp = new ErrorResponse(
+                "USER_BLOCKED",
+                ex.getMessage(),
+                Map.of(),
+                Instant.now()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(resp);
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex) {
+        // Check if it's a Kafka-related error
+        if (ex.getMessage() != null && ex.getMessage().contains("Kafka")) {
+            ErrorResponse resp = new ErrorResponse(
+                    "KAFKA_ERROR",
+                    "Failed to send SMS event to Kafka. SMS may have been sent to third-party API.",
+                    Map.of("error", ex.getMessage()),
+                    Instant.now()
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+        }
+
+        // Generic RuntimeException handler (fallback)
+        ErrorResponse resp = new ErrorResponse(
+                "INTERNAL_ERROR",
+                "Something went wrong",
+                Map.of("reason", ex.getClass().getSimpleName()),
+                Instant.now()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
+        ErrorResponse resp = new ErrorResponse(
+                "INTERNAL_ERROR",
+                "Something went wrong",
+                Map.of("reason", ex.getClass().getSimpleName()),
+                Instant.now()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
     }
 
 }

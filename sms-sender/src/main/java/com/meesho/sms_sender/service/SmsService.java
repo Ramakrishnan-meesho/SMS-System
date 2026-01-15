@@ -3,6 +3,7 @@ package com.meesho.sms_sender.service;
 import com.meesho.sms_sender.dto.SendSmsRequest;
 import com.meesho.sms_sender.dto.SendSmsResponse;
 import com.meesho.sms_sender.dto.SmsEvent;
+import com.meesho.sms_sender.exception.UserBlockedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.support.SendResult;
@@ -38,7 +39,8 @@ public class SmsService {
      *
      * @param request The SMS send request containing phoneNumber and message
      * @return SendSmsResponse with requestId, status, and timestamp
-     * @throws RuntimeException if user is blocked or Kafka send fails
+     * @throws UserBlockedException if user is blocked
+     * @throws RuntimeException if Kafka send fails
      */
     public SendSmsResponse sendSms(SendSmsRequest request) {
         logger.info("Processing SMS send request for phoneNumber: {}", request.getPhoneNumber());
@@ -51,7 +53,7 @@ public class SmsService {
         String userId = request.getPhoneNumber();
         if (blockListService.isBlocked(userId)) {
             logger.warn("SMS send blocked for user: {}", userId);
-            throw new RuntimeException("User is blocked: " + userId);
+            throw new UserBlockedException(userId);
         }
 
         // Step 3: Mock third-party SMS API call
