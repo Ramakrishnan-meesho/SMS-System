@@ -179,6 +179,33 @@ func (s *MongoStore) DeleteAll() (int64, error) {
 	return result.DeletedCount, nil
 }
 
+// GetDistinctPhoneNumbers retrieves all distinct phone numbers from MongoDB.
+func (s *MongoStore) GetDistinctPhoneNumbers() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Use MongoDB's Distinct operation to get unique phone numbers
+	phoneNumbers, err := s.collection.Distinct(ctx, "phoneNumber", bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct phone numbers: %w", err)
+	}
+
+	// Convert []interface{} to []string
+	result := make([]string, 0, len(phoneNumbers))
+	for _, pn := range phoneNumbers {
+		if str, ok := pn.(string); ok && str != "" {
+			result = append(result, str)
+		}
+	}
+
+	// Return empty slice instead of nil if no phone numbers found
+	if result == nil {
+		result = []string{}
+	}
+
+	return result, nil
+}
+
 // Close closes the MongoDB connection.
 // Should be called when shutting down the service.
 func (s *MongoStore) Close() error {

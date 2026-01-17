@@ -25,4 +25,8 @@ type Store interface {
 	// DeleteAll removes all messages from the store.
 	// Returns the number of deleted messages and any error.
 	DeleteAll() (int64, error)
+
+	// GetDistinctPhoneNumbers retrieves all distinct phone numbers from the store.
+	// Returns an empty slice if no phone numbers are found.
+	GetDistinctPhoneNumbers() ([]string, error)
 }

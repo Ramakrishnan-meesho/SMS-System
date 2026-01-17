@@ -69,26 +69,54 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	// CORS middleware
+	corsMiddleware := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			// Set CORS headers
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Max-Age", "3600")
+
+			// Handle preflight requests
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next(w, r)
+		}
+	}
+
 	// GET /ping - Health check endpoint
-	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/ping", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		h.Ping(w, r)
-	})
+	}))
+
+	// GET /v1/conversations - Get all distinct phone numbers (conversations)
+	mux.HandleFunc("/v1/conversations", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.GetConversations(w, r)
+	}))
 
 	// GET /v1/user/{user_id}/messages - Required endpoint for SMS Store
-	mux.HandleFunc("/v1/user/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/user/", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		h.GetUserMessages(w, r)
-	})
+	}))
 
 	// POST /messages, GET /messages, DELETE /messages - Optional endpoints for testing
-	mux.HandleFunc("/messages", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/messages", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			h.CreateMessage(w, r)
@@ -99,7 +127,7 @@ func main() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	})
+	}))
 
 	addr := ":8082"
 	server := &http.Server{
@@ -130,6 +158,7 @@ func main() {
 	log.Println("sms-store server started at", addr)
 	log.Println("Available endpoints:")
 	log.Println("  GET    /ping")
+	log.Println("  GET    /v1/conversations")
 	log.Println("  GET    /v1/user/{user_id}/messages")
 	log.Println("  POST   /messages (testing only)")
 	log.Println("  GET    /messages (testing only)")

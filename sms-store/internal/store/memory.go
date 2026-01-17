@@ -63,3 +63,22 @@ func (s *MemoryStore) SaveBatch(msgs []models.Message) (int, error) {
 	s.messages = append(s.messages, msgs...)
 	return len(msgs), nil
 }
+
+func (s *MemoryStore) GetDistinctPhoneNumbers() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	phoneNumberSet := make(map[string]bool)
+	for _, msg := range s.messages {
+		if msg.PhoneNumber != "" {
+			phoneNumberSet[msg.PhoneNumber] = true
+		}
+	}
+
+	result := make([]string, 0, len(phoneNumberSet))
+	for pn := range phoneNumberSet {
+		result = append(result, pn)
+	}
+
+	return result, nil
+}

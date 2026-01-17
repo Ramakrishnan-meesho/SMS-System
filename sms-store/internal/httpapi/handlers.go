@@ -139,3 +139,15 @@ func (h *Handler) DeleteAllMessages(w http.ResponseWriter, r *http.Request) {
 		"deletedCount": deletedCount,
 	})
 }
+
+// GetConversations retrieves all distinct phone numbers (conversations) from the store.
+func (h *Handler) GetConversations(w http.ResponseWriter, r *http.Request) {
+	phoneNumbers, err := h.store.GetDistinctPhoneNumbers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "could not retrieve conversations")
+		return
+	}
+
+	// Return empty array if no conversations found (not an error)
+	writeJSON(w, http.StatusOK, phoneNumbers)
+}
