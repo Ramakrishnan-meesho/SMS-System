@@ -26,3 +26,5 @@ Thumbs.db
 # Maven wrapper (optional - can be committed or ignored)
 # sms-sender/mvnw
 # sms-sender/mvnw.cmd
+
+frontend/.gitignore

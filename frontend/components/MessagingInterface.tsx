@@ -115,10 +115,17 @@ export default function MessagingInterface() {
       
       // Preserve existing conversations that might have optimistic messages
       setConversations((prev) => {
-        const merged = [...new Set([...prev, ...phoneNumbers])];
+        const seen: { [key: string]: boolean } = {};
+        const merged: string[] = [];
+        [...prev, ...phoneNumbers].forEach((num) => {
+          if (!seen[num]) {
+            merged.push(num);
+            seen[num] = true;
+          }
+        });
         return merged;
       });
-      
+
       // Load messages for all conversations in parallel
       const messagesMap: { [phoneNumber: string]: Message[] } = {};
       const loadPromises = phoneNumbers.map(async (phoneNumber) => {
