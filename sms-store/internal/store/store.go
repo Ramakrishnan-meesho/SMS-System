@@ -29,4 +29,8 @@ type Store interface {
 	// GetDistinctPhoneNumbers retrieves all distinct phone numbers from the store.
 	// Returns an empty slice if no phone numbers are found.
 	GetDistinctPhoneNumbers() ([]string, error)
+
+	// DeleteByPhoneNumber deletes all messages for a specific phone number.
+	// Returns the number of deleted messages and any error.
+	DeleteByPhoneNumber(phoneNumber string) (int64, error)
 }

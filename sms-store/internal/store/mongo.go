@@ -206,6 +206,31 @@ func (s *MongoStore) GetDistinctPhoneNumbers() ([]string, error) {
 	return result, nil
 }
 
+// GetClient returns the MongoDB client (for creating other stores that share the connection).
+func (s *MongoStore) GetClient() *mongo.Client {
+	return s.client
+}
+
+// GetDatabaseName returns the database name.
+func (s *MongoStore) GetDatabaseName() string {
+	return s.database.Name()
+}
+
+// DeleteByPhoneNumber deletes all messages for a specific phone number from MongoDB.
+func (s *MongoStore) DeleteByPhoneNumber(phoneNumber string) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := bson.M{"phoneNumber": phoneNumber}
+
+	result, err := s.collection.DeleteMany(ctx, filter)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete messages: %w", err)
+	}
+
+	return result.DeletedCount, nil
+}
+
 // Close closes the MongoDB connection.
 // Should be called when shutting down the service.
 func (s *MongoStore) Close() error {

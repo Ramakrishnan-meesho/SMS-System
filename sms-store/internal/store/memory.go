@@ -82,3 +82,22 @@ func (s *MemoryStore) GetDistinctPhoneNumbers() ([]string, error) {
 
 	return result, nil
 }
+
+func (s *MemoryStore) DeleteByPhoneNumber(phoneNumber string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deletedCount int64
+	filtered := make([]models.Message, 0, len(s.messages))
+	
+	for _, msg := range s.messages {
+		if msg.PhoneNumber != phoneNumber {
+			filtered = append(filtered, msg)
+		} else {
+			deletedCount++
+		}
+	}
+	
+	s.messages = filtered
+	return deletedCount, nil
+}
