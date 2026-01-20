@@ -35,8 +35,17 @@ func main() {
 		}
 	}()
 
-	// Create handler with MongoDB store
-	h := httpapi.NewHandler(mongoStore)
+	// Initialize ProfileStore
+	profileCollectionName := getEnv("MONGODB_PROFILE_COLLECTION", "profiles")
+	profileStore := store.NewMongoProfileStore(
+		mongoStore.GetClient(),
+		mongoStore.GetDatabaseName(),
+		profileCollectionName,
+	)
+	log.Println("ProfileStore initialized")
+
+	// Create handler with MongoDB store and ProfileStore
+	h := httpapi.NewHandler(mongoStore, profileStore)
 
 	// Initialize Kafka consumer
 	kafkaBrokers := getEnv("KAFKA_BROKERS", "localhost:9092")
@@ -107,12 +116,44 @@ func main() {
 	}))
 
 	// GET /v1/user/{user_id}/messages - Required endpoint for SMS Store
+	// DELETE /v1/user/{user_id}/messages - Delete all messages for a conversation
 	mux.HandleFunc("/v1/user/", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		// Only handle paths that end with /messages
+		if !strings.HasSuffix(r.URL.Path, "/messages") {
+			http.NotFound(w, r)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			h.GetUserMessages(w, r)
+		case http.MethodDelete:
+			h.DeleteUserMessages(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
+	// GET /v1/profile/{phoneNumber} - Get profile
+	// PUT /v1/profile/{phoneNumber} - Update profile
+	mux.HandleFunc("/v1/profile/", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.GetProfile(w, r)
+		case http.MethodPut:
+			h.UpdateProfile(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
+	// POST /v1/profile - Create profile
+	mux.HandleFunc("/v1/profile", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		h.GetUserMessages(w, r)
+		h.CreateProfile(w, r)
 	}))
 
 	// POST /messages, GET /messages, DELETE /messages - Optional endpoints for testing
@@ -160,6 +201,10 @@ func main() {
 	log.Println("  GET    /ping")
 	log.Println("  GET    /v1/conversations")
 	log.Println("  GET    /v1/user/{user_id}/messages")
+	log.Println("  DELETE /v1/user/{user_id}/messages")
+	log.Println("  GET    /v1/profile/{phoneNumber}")
+	log.Println("  PUT    /v1/profile/{phoneNumber}")
+	log.Println("  POST   /v1/profile")
 	log.Println("  POST   /messages (testing only)")
 	log.Println("  GET    /messages (testing only)")
 	log.Println("  DELETE /messages (testing only - clears all messages)")
