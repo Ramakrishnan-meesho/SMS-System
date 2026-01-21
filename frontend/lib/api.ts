@@ -45,6 +45,14 @@ export interface BlockStatus {
   message?: string;
 }
 
+export interface Profile {
+  phoneNumber: string;
+  name: string;
+  avatar: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // SMS Sender API
 export const smsApiClient = {
   sendSms: async (request: SendSmsRequest): Promise<SendSmsResponse> => {
@@ -232,6 +240,63 @@ export const storeApiClient = {
     } catch (error: any) {
       console.error('Error pinging store API:', error);
       throw error;
+    }
+  },
+  
+  getProfile: async (phoneNumber: string): Promise<Profile> => {
+    try {
+      const response = await storeApi.get<Profile>(`/v1/profile/${phoneNumber}`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        throw new Error('Profile not found');
+      }
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to get profile';
+      throw new Error(errorMessage);
+    }
+  },
+  
+  updateProfile: async (phoneNumber: string, profile: Partial<Profile>): Promise<Profile> => {
+    try {
+      const response = await storeApi.put<Profile>(`/v1/profile/${phoneNumber}`, profile);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update profile';
+      throw new Error(errorMessage);
+    }
+  },
+  
+  createProfile: async (profile: Omit<Profile, 'createdAt' | 'updatedAt'>): Promise<Profile> => {
+    try {
+      const response = await storeApi.post<Profile>('/v1/profile', profile);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 409) {
+        throw new Error('Profile already exists');
+      }
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create profile';
+      throw new Error(errorMessage);
+    }
+  },
+  
+  deleteConversation: async (phoneNumber: string): Promise<{ message: string; deletedCount: number; phoneNumber: string }> => {
+    try {
+      console.log('Deleting conversation for phone number:', phoneNumber);
+      const url = `/v1/user/${phoneNumber}/messages`;
+      console.log('DELETE request to:', `${STORE_API_BASE}${url}`);
+      const response = await storeApi.delete<{ message: string; deletedCount: number; phoneNumber: string }>(url);
+      console.log('Delete conversation successful:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Delete conversation error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        url: error.config?.url,
+        method: error.config?.method,
+      });
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete conversation';
+      throw new Error(errorMessage);
     }
   },
 };
