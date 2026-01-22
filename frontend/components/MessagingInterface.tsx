@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MessageSquare, Phone } from 'lucide-react';
+import { Send, MessageSquare, Phone, User } from 'lucide-react';
 import { smsApiClient, storeApiClient, Message } from '@/lib/api';
 import { subscribeToSmsStatus } from '@/lib/socket-io-client';
 import { format } from 'date-fns';
 import ConversationList from './ConversationList';
 import NewConversationDialog from './NewConversationDialog';
+import ProfileDialog from './ProfileDialog';
 
 export default function MessagingInterface() {
   const [conversations, setConversations] = useState<string[]>([]);
@@ -16,6 +17,8 @@ export default function MessagingInterface() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewDialog, setShowNewDialog] = useState(false);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [profilePhoneNumber, setProfilePhoneNumber] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const unsubscribeRefs = useRef<{ [phoneNumber: string]: () => void }>({});
@@ -27,11 +30,11 @@ export default function MessagingInterface() {
       try {
         setLoading(true);
         setError(null);
-        
+
         // Load conversations first
         const phoneNumbers = await storeApiClient.getConversations();
         setConversations(phoneNumbers);
-        
+
         // Load messages for all conversations in parallel
         const messagesMap: { [phoneNumber: string]: Message[] } = {};
         const loadPromises = phoneNumbers.map(async (phoneNumber) => {
@@ -47,10 +50,10 @@ export default function MessagingInterface() {
             messagesMap[phoneNumber] = [];
           }
         });
-        
+
         await Promise.all(loadPromises);
         setMessages(messagesMap);
-        
+
         // Auto-select first conversation if available
         if (phoneNumbers.length > 0 && !selectedPhoneNumber) {
           setSelectedPhoneNumber(phoneNumbers[0]);
@@ -62,9 +65,9 @@ export default function MessagingInterface() {
         setLoading(false);
       }
     };
-    
+
     initializeData();
-    
+
     // Cleanup retry timers on unmount
     return () => {
       Object.values(retryTimersRef.current).forEach(timers => {
@@ -86,17 +89,17 @@ export default function MessagingInterface() {
   // This ensures PENDING messages eventually update to SUCCESS even if polling misses them
   useEffect(() => {
     if (!selectedPhoneNumber) return;
-    
+
     const statusCheckInterval = setInterval(() => {
       // Check if there are any PENDING messages that need status updates
       const currentMessages = messages[selectedPhoneNumber] || [];
       const hasPendingMessages = currentMessages.some(m => m.status === 'PENDING');
-      
+
       if (hasPendingMessages) {
         loadMessages(selectedPhoneNumber, true);
       }
     }, 1000); // Check every 2 seconds instead of 3
-    
+
     return () => clearInterval(statusCheckInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPhoneNumber]); // Only depend on selectedPhoneNumber, messages checked inside
@@ -112,7 +115,7 @@ export default function MessagingInterface() {
   const loadConversations = async () => {
     try {
       const phoneNumbers = await storeApiClient.getConversations();
-      
+
       // Preserve existing conversations that might have optimistic messages
       setConversations((prev) => {
         const seen: { [key: string]: boolean } = {};
@@ -137,7 +140,7 @@ export default function MessagingInterface() {
           messagesMap[phoneNumber] = [];
         }
       });
-      
+
       await Promise.all(loadPromises);
       setMessages((prev) => ({ ...prev, ...messagesMap }));
     } catch (error) {
@@ -150,10 +153,10 @@ export default function MessagingInterface() {
       console.log(`Loading messages for ${phoneNumber}, preserveOptimistic: ${preserveOptimistic}`);
       const data = await storeApiClient.getUserMessages(phoneNumber);
       console.log(`Loaded ${data.length} messages from API for ${phoneNumber}`);
-      
+
       setMessages((prev) => {
         const currentMessages = prev[phoneNumber] || [];
-        
+
         if (preserveOptimistic && currentMessages.length > 0) {
           // Merge persisted messages with optimistic ones
           // Match by correlationId (which is the requestId) to avoid duplicates
@@ -161,40 +164,40 @@ export default function MessagingInterface() {
           const persistedCorrelationIds = new Set(
             data.map(m => m.correlationId || m.id).filter(Boolean)
           );
-          
+
           // Filter optimistic messages: keep those not yet persisted
           const optimisticMessages = currentMessages.filter(m => {
             const correlationId = m.correlationId || m.id;
-            
+
             // Check by correlationId first (primary matching method)
             if (correlationId && persistedCorrelationIds.has(correlationId)) {
               return false; // Already persisted (matched by correlationId)
             }
-            
+
             // Check by ID as fallback
             if (persistedIds.has(m.id)) {
               return false; // Already persisted
             }
-            
+
             // Check if message is too old (more than 5 seconds) - likely persisted
             const messageAge = Date.now() - new Date(m.createdAt).getTime();
             if (messageAge > 2500) {
               return false; // Too old, should be persisted by now
             }
-            
+
             return true; // Keep this optimistic message
           });
-          
+
           // Optimized merge: Use Map to prevent duplicates and ensure status updates
           // When a persisted message matches an optimistic one, use the persisted version (has correct status)
           const mergedMap = new Map<string, Message>();
-          
+
           // First, add all persisted messages (they have the latest status from backend)
           data.forEach(msg => {
             const key = msg.correlationId || msg.id;
             mergedMap.set(key, msg);
           });
-          
+
           // Then, add optimistic messages that aren't persisted yet
           // If a persisted message exists with same correlationId, it will overwrite the optimistic one
           optimisticMessages.forEach(msg => {
@@ -206,12 +209,12 @@ export default function MessagingInterface() {
               console.log(`Found persisted message for optimistic: ${key}, using persisted status: ${mergedMap.get(key)?.status}`);
             }
           });
-          
+
           // Convert to array and sort by createdAt
-          const merged = Array.from(mergedMap.values()).sort((a, b) => 
+          const merged = Array.from(mergedMap.values()).sort((a, b) =>
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
-          
+
           // Check if any optimistic messages were replaced with persisted ones
           const statusUpdates = merged.filter(m => {
             const key = m.correlationId || m.id;
@@ -219,24 +222,24 @@ export default function MessagingInterface() {
             const isPersisted = data.some(p => (p.correlationId || p.id) === key);
             return wasOptimistic && isPersisted && m.status !== 'PENDING';
           });
-          
+
           if (statusUpdates.length > 0) {
             console.log(`Status updated for ${statusUpdates.length} message(s):`, statusUpdates.map(m => `${m.status} (${m.correlationId || m.id})`));
           }
-          
+
           console.log(`Merged ${merged.length} messages (${data.length} persisted + ${optimisticMessages.length} optimistic) for ${phoneNumber}`);
-          
+
           return {
             ...prev,
             [phoneNumber]: merged,
           };
         }
-        
+
         // Sort by createdAt
-        const sorted = [...data].sort((a, b) => 
+        const sorted = [...data].sort((a, b) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
-        
+
         return {
           ...prev,
           [phoneNumber]: sorted,
@@ -264,7 +267,7 @@ export default function MessagingInterface() {
       const unsubscribe = await subscribeToSmsStatus(phoneNumber, (data) => {
         setMessages((prev) => {
           const currentMessages = prev[phoneNumber] || [];
-          
+
           // Try to match by correlationId/requestId (for both optimistic and persisted messages)
           let found = false;
           const updated = currentMessages.map((msg) => {
@@ -276,14 +279,14 @@ export default function MessagingInterface() {
             }
             return msg;
           });
-          
+
           // If not found, reload messages to get persisted version
           // This handles edge cases where message hasn't been matched yet
           if (!found && currentMessages.length > 0) {
             // Reload messages after a short delay to get the persisted version
             setTimeout(() => loadMessages(phoneNumber, true), 1000);
           }
-          
+
           return {
             ...prev,
             [phoneNumber]: updated,
@@ -336,32 +339,32 @@ export default function MessagingInterface() {
       // Fast polling - message is usually persisted within 1-2 seconds
       const correlationId = response.requestId;
       const pollDelays = [300, 600, 800, 1200]; // Faster, more frequent checks
-      
+
       // Clear any existing retry timers for this conversation
       if (retryTimersRef.current[selectedPhoneNumber]) {
         retryTimersRef.current[selectedPhoneNumber].forEach(timer => clearTimeout(timer));
         retryTimersRef.current[selectedPhoneNumber] = [];
       }
-      
+
       // Track if message was found to stop polling
       let messageFound = false;
-      
+
       // Optimized polling function that stops when message is found
       const pollForMessage = async (attempt: number) => {
         if (messageFound) return; // Stop if already found
-        
+
         try {
           const data = await storeApiClient.getUserMessages(selectedPhoneNumber);
-          
+
           // Check if our message is now persisted (match by correlationId)
           const persistedMessage = data.find(
             m => (m.correlationId || m.id) === correlationId
           );
-          
+
           if (persistedMessage) {
             messageFound = true;
             console.log(`✓ Message found in poll attempt ${attempt + 1}, status: ${persistedMessage.status}`);
-            
+
             // Message found! Update in-place immediately
             setMessages((prev) => {
               const currentMessages = prev[selectedPhoneNumber] || [];
@@ -373,13 +376,13 @@ export default function MessagingInterface() {
                 }
                 return msg;
               });
-              
+
               return {
                 ...prev,
                 [selectedPhoneNumber]: updated,
               };
             });
-            
+
             // Stop all polling timers
             if (retryTimersRef.current[selectedPhoneNumber]) {
               retryTimersRef.current[selectedPhoneNumber].forEach(timer => clearTimeout(timer));
@@ -387,7 +390,7 @@ export default function MessagingInterface() {
             }
             return;
           }
-          
+
           // Message not found yet, continue polling if we have attempts left
           if (attempt < pollDelays.length - 1 && !messageFound) {
             const nextAttempt = attempt + 1;
@@ -413,25 +416,25 @@ export default function MessagingInterface() {
           }
         }
       };
-      
+
       // Start polling after first delay
       const firstTimer = setTimeout(() => pollForMessage(0), pollDelays[0]);
       if (!retryTimersRef.current[selectedPhoneNumber]) {
         retryTimersRef.current[selectedPhoneNumber] = [];
       }
       retryTimersRef.current[selectedPhoneNumber].push(firstTimer);
-      
+
     } catch (error: any) {
       console.error('Failed to send message:', error);
-      
+
       // Restore message text on error so user can retry
       setNewMessage(messageText);
-      
+
       // Only show error for actual failures, not network timeouts that might recover
       const isNetworkError = !error.response;
       const isServerError = error.response?.status >= 500;
       const isClientError = error.response?.status >= 400 && error.response?.status < 500;
-      
+
       // Show error only for real failures (4xx client errors or network errors)
       // Don't show for 5xx server errors as they might be temporary
       if (isNetworkError || isClientError) {
@@ -455,6 +458,74 @@ export default function MessagingInterface() {
       }));
     }
     setSelectedPhoneNumber(phoneNumber);
+  };
+
+  const handleDeleteConversation = async (phoneNumber: string) => {
+    try {
+      await storeApiClient.deleteConversation(phoneNumber);
+
+      // Remove from conversations list
+      setConversations((prev) => prev.filter((num) => num !== phoneNumber));
+
+      // Remove messages for this conversation
+      setMessages((prev) => {
+        const updated = { ...prev };
+        delete updated[phoneNumber];
+        return updated;
+      });
+
+      // If this was the selected conversation, clear selection
+      if (selectedPhoneNumber === phoneNumber) {
+        setSelectedPhoneNumber(null);
+      }
+
+      // Clean up WebSocket subscription
+      if (unsubscribeRefs.current[phoneNumber]) {
+        unsubscribeRefs.current[phoneNumber]();
+        delete unsubscribeRefs.current[phoneNumber];
+      }
+
+      // Clean up retry timers
+      if (retryTimersRef.current[phoneNumber]) {
+        retryTimersRef.current[phoneNumber].forEach(timer => clearTimeout(timer));
+        delete retryTimersRef.current[phoneNumber];
+      }
+    } catch (error: any) {
+      console.error('Failed to delete conversation:', error);
+      alert(`Failed to delete conversation: ${error.message}`);
+    }
+  };
+
+  const handleDeleteAllConversations = async () => {
+    try {
+      // Delete all conversations in parallel
+      const deletePromises = conversations.map((phoneNumber) =>
+        storeApiClient.deleteConversation(phoneNumber).catch((error) => {
+          console.error(`Failed to delete conversation ${phoneNumber}:`, error);
+          return null; // Continue with other deletions even if one fails
+        })
+      );
+
+      await Promise.all(deletePromises);
+
+      // Clear all state
+      setConversations([]);
+      setMessages({});
+      setSelectedPhoneNumber(null);
+
+      // Clean up all WebSocket subscriptions
+      Object.values(unsubscribeRefs.current).forEach((unsubscribe) => unsubscribe());
+      unsubscribeRefs.current = {};
+
+      // Clean up all retry timers
+      Object.values(retryTimersRef.current).forEach((timers) => {
+        timers.forEach((timer) => clearTimeout(timer));
+      });
+      retryTimersRef.current = {};
+    } catch (error: any) {
+      console.error('Failed to delete all conversations:', error);
+      alert(`Failed to delete all conversations: ${error.message}`);
+    }
   };
 
   const currentMessages = selectedPhoneNumber ? messages[selectedPhoneNumber] || [] : [];
@@ -495,12 +566,37 @@ export default function MessagingInterface() {
         onStartConversation={handleNewConversation}
       />
 
+      <ProfileDialog
+        isOpen={showProfileDialog}
+        onClose={() => {
+          setShowProfileDialog(false);
+          setProfilePhoneNumber(null);
+        }}
+        phoneNumber={profilePhoneNumber || ''}
+        onProfileUpdated={async () => {
+          // Reload conversations to refresh profile names
+          // This will trigger ConversationList's useEffect to reload profiles
+          try {
+            const phoneNumbers = await storeApiClient.getConversations();
+            setConversations(phoneNumbers);
+          } catch (error) {
+            console.error('Failed to reload conversations after profile update:', error);
+          }
+        }}
+      />
+
       {/* Conversation List */}
       <ConversationList
         conversations={conversations}
         selectedPhoneNumber={selectedPhoneNumber}
         onSelectConversation={setSelectedPhoneNumber}
         onNewConversation={() => setShowNewDialog(true)}
+        onDeleteConversation={handleDeleteConversation}
+        onDeleteAllConversations={handleDeleteAllConversations}
+        onEditProfile={(phoneNumber) => {
+          setProfilePhoneNumber(phoneNumber);
+          setShowProfileDialog(true);
+        }}
         messages={messages}
       />
 
@@ -515,13 +611,25 @@ export default function MessagingInterface() {
                   <Phone className="w-5 h-5 text-blue-600" />
                   <span className="font-semibold">{selectedPhoneNumber}</span>
                 </div>
-                <button
-                  onClick={() => loadMessages(selectedPhoneNumber, false)}
-                  className="text-sm text-blue-600 hover:text-blue-700 px-3 py-1 rounded hover:bg-blue-50 transition-colors"
-                  title="Refresh messages"
-                >
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setProfilePhoneNumber(selectedPhoneNumber);
+                      setShowProfileDialog(true);
+                    }}
+                    className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                    title="Edit Profile / Assign Name"
+                  >
+                    <User className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => loadMessages(selectedPhoneNumber, false)}
+                    className="text-sm text-blue-600 hover:text-blue-700 px-3 py-1 rounded hover:bg-blue-50 transition-colors"
+                    title="Refresh messages"
+                  >
+                    Refresh
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -536,36 +644,32 @@ export default function MessagingInterface() {
                 currentMessages.map((message, index) => (
                   <div
                     key={`${message.id}-${index}-${message.createdAt}`}
-                    className={`flex ${
-                      message.phoneNumber === selectedPhoneNumber
+                    className={`flex ${message.phoneNumber === selectedPhoneNumber
                         ? 'justify-end'
                         : 'justify-start'
-                    }`}
+                      }`}
                   >
                     <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        message.phoneNumber === selectedPhoneNumber
+                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.phoneNumber === selectedPhoneNumber
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-200 text-gray-900'
-                      }`}
+                        }`}
                     >
                       <p className="text-sm">{message.text}</p>
                       <div className="flex items-center justify-between mt-1">
                         <span
-                          className={`text-xs ${
-                            message.phoneNumber === selectedPhoneNumber
+                          className={`text-xs ${message.phoneNumber === selectedPhoneNumber
                               ? 'text-blue-100'
                               : 'text-gray-500'
-                          }`}
+                            }`}
                         >
                           {message.createdAt ? format(new Date(message.createdAt), 'HH:mm') : '--:--'}
                         </span>
                         <span
-                          className={`text-xs ml-2 ${
-                            message.status === 'SUCCESS'
+                          className={`text-xs ml-2 ${message.status === 'SUCCESS'
                               ? 'text-green-300'
                               : 'text-red-300'
-                          }`}
+                            }`}
                         >
                           {message.status}
                         </span>
