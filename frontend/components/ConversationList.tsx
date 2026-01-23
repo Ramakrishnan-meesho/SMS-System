@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageSquare, Plus, Phone, Trash2, User } from 'lucide-react';
+import { MessageSquare, Plus, Phone, Trash2, User, Ban } from 'lucide-react';
 import { Message, Profile, storeApiClient } from '@/lib/api';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -14,6 +14,7 @@ interface ConversationListProps {
   onDeleteAllConversations: () => void;
   onEditProfile?: (phoneNumber: string) => void;
   messages: { [phoneNumber: string]: Message[] };
+  blockedNumbers?: { [phoneNumber: string]: boolean };
 }
 
 export default function ConversationList({
@@ -25,6 +26,7 @@ export default function ConversationList({
   onDeleteAllConversations,
   onEditProfile,
   messages,
+  blockedNumbers = {},
 }: ConversationListProps) {
   const [profiles, setProfiles] = useState<{ [phoneNumber: string]: Profile }>({});
   const [hoveredConversation, setHoveredConversation] = useState<string | null>(null);
@@ -210,18 +212,25 @@ export default function ConversationList({
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar/Icon */}
-                      <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
-                        {profile?.avatar && (profile.avatar.startsWith('data:') || profile.avatar.startsWith('http')) ? (
-                          <img
-                            src={profile.avatar}
-                            alt={displayName}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <Phone className="w-6 h-6 text-blue-600" />
+                      <div className="flex-shrink-0 relative">
+                        <div className={`w-12 h-12 rounded-full ${blockedNumbers[phoneNumber] ? 'bg-red-100' : 'bg-blue-100'} flex items-center justify-center overflow-hidden`}>
+                          {profile?.avatar && (profile.avatar.startsWith('data:') || profile.avatar.startsWith('http')) ? (
+                            <img
+                              src={profile.avatar}
+                              alt={displayName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <Phone className={`w-6 h-6 ${blockedNumbers[phoneNumber] ? 'text-red-600' : 'text-blue-600'}`} />
+                          )}
+                        </div>
+                        {blockedNumbers[phoneNumber] && (
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full border-2 border-white flex items-center justify-center">
+                            <Ban className="w-2.5 h-2.5 text-white" />
+                          </div>
                         )}
                       </div>
 
@@ -229,12 +238,17 @@ export default function ConversationList({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex flex-col min-w-0">
-                            <span className={`font-semibold text-sm truncate ${isSelected ? 'text-blue-900' : 'text-gray-900'
-                              }`}>
-                              {displayName}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`font-semibold text-sm truncate ${blockedNumbers[phoneNumber] ? 'text-red-600' : isSelected ? 'text-blue-900' : 'text-gray-900'
+                                }`}>
+                                {displayName}
+                              </span>
+                              {blockedNumbers[phoneNumber] && (
+                                <Ban className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
+                              )}
+                            </div>
                             {showPhoneNumber && (
-                              <span className={`text-xs truncate ${isSelected ? 'text-blue-600' : 'text-gray-500'
+                              <span className={`text-xs truncate ${blockedNumbers[phoneNumber] ? 'text-red-500' : isSelected ? 'text-blue-600' : 'text-gray-500'
                                 }`}>
                                 {phoneNumber}
                               </span>

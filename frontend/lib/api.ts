@@ -95,7 +95,13 @@ export const smsApiClient = {
   blockUser: async (phoneNumber: string): Promise<BlockStatus> => {
     try {
       const response = await smsApi.post<BlockStatus>(`/block/${phoneNumber}`);
-      return response.data;
+      // Backend returns { userId, status: "blocked", message }
+      // Map it to our BlockStatus interface with isBlocked
+      return {
+        ...response.data,
+        phoneNumber: response.data.userId || phoneNumber,
+        isBlocked: true, // Block action always means blocked
+      };
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Failed to block user';
       throw new Error(errorMessage);
@@ -105,7 +111,13 @@ export const smsApiClient = {
   unblockUser: async (phoneNumber: string): Promise<BlockStatus> => {
     try {
       const response = await smsApi.delete<BlockStatus>(`/block/${phoneNumber}`);
-      return response.data;
+      // Backend returns { userId, status: "unblocked", message }
+      // Map it to our BlockStatus interface with isBlocked
+      return {
+        ...response.data,
+        phoneNumber: response.data.userId || phoneNumber,
+        isBlocked: false, // Unblock action always means not blocked
+      };
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Failed to unblock user';
       throw new Error(errorMessage);
@@ -115,7 +127,13 @@ export const smsApiClient = {
   checkBlockStatus: async (phoneNumber: string): Promise<BlockStatus> => {
     try {
       const response = await smsApi.get<BlockStatus>(`/block/${phoneNumber}`);
-      return response.data;
+      // Backend returns { userId, isBlocked, message }
+      // Ensure phoneNumber is set
+      return {
+        ...response.data,
+        phoneNumber: response.data.userId || response.data.phoneNumber || phoneNumber,
+        isBlocked: response.data.isBlocked ?? false,
+      };
     } catch (error: any) {
       // If user doesn't exist, return not blocked
       if (error.response?.status === 404) {

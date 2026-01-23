@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MessageSquare, Phone, User } from 'lucide-react';
+import { Send, MessageSquare, Phone, User, Ban, Unlock } from 'lucide-react';
 import { smsApiClient, storeApiClient, Message } from '@/lib/api';
 import { subscribeToSmsStatus } from '@/lib/socket-io-client';
 import { format } from 'date-fns';
@@ -20,6 +20,9 @@ export default function MessagingInterface() {
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [profilePhoneNumber, setProfilePhoneNumber] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [blockedNumbers, setBlockedNumbers] = useState<{ [phoneNumber: string]: boolean }>({});
+  const [showBlockedModal, setShowBlockedModal] = useState(false);
+  const [blockingInProgress, setBlockingInProgress] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const unsubscribeRefs = useRef<{ [phoneNumber: string]: () => void }>({});
   const retryTimersRef = useRef<{ [phoneNumber: string]: NodeJS.Timeout[] }>({});
@@ -54,6 +57,21 @@ export default function MessagingInterface() {
         await Promise.all(loadPromises);
         setMessages(messagesMap);
 
+        // Load block status for all conversations in parallel
+        const blockStatusMap: { [phoneNumber: string]: boolean } = {};
+        const blockStatusPromises = phoneNumbers.map(async (phoneNumber) => {
+          try {
+            const status = await smsApiClient.checkBlockStatus(phoneNumber);
+            blockStatusMap[phoneNumber] = status.isBlocked || false;
+          } catch (error: any) {
+            console.error(`Failed to check block status for ${phoneNumber}:`, error);
+            blockStatusMap[phoneNumber] = false;
+          }
+        });
+
+        await Promise.all(blockStatusPromises);
+        setBlockedNumbers(blockStatusMap);
+
         // Auto-select first conversation if available
         if (phoneNumbers.length > 0 && !selectedPhoneNumber) {
           setSelectedPhoneNumber(phoneNumbers[0]);
@@ -76,12 +94,23 @@ export default function MessagingInterface() {
     };
   }, []);
 
-  // Load messages when conversation is selected
+  // Load messages and block status when conversation is selected
   useEffect(() => {
     if (selectedPhoneNumber) {
       // Reload messages for selected conversation to ensure we have latest
       loadMessages(selectedPhoneNumber, true); // Preserve any optimistic messages
       setupWebSocket(selectedPhoneNumber);
+      
+      // Check block status for selected conversation
+      const checkBlockStatus = async () => {
+        try {
+          const status = await smsApiClient.checkBlockStatus(selectedPhoneNumber);
+          setBlockedNumbers((prev) => ({ ...prev, [selectedPhoneNumber]: status.isBlocked || false }));
+        } catch (error: any) {
+          console.error(`Failed to check block status for ${selectedPhoneNumber}:`, error);
+        }
+      };
+      checkBlockStatus();
     }
   }, [selectedPhoneNumber]);
 
@@ -306,6 +335,12 @@ export default function MessagingInterface() {
   const handleSend = async () => {
     if (!newMessage.trim() || sending || !selectedPhoneNumber) return;
 
+    // Check if the number is blocked
+    if (blockedNumbers[selectedPhoneNumber]) {
+      setShowBlockedModal(true);
+      return;
+    }
+
     const messageText = newMessage.trim();
     setNewMessage(''); // Clear input immediately for better UX
     setSending(true);
@@ -449,13 +484,22 @@ export default function MessagingInterface() {
     }
   };
 
-  const handleNewConversation = (phoneNumber: string) => {
+  const handleNewConversation = async (phoneNumber: string) => {
     if (!conversations.includes(phoneNumber)) {
       setConversations((prev) => [...prev, phoneNumber]);
       setMessages((prev) => ({
         ...prev,
         [phoneNumber]: [],
       }));
+      
+      // Check block status for new conversation
+      try {
+        const status = await smsApiClient.checkBlockStatus(phoneNumber);
+        setBlockedNumbers((prev) => ({ ...prev, [phoneNumber]: status.isBlocked || false }));
+      } catch (error: any) {
+        console.error(`Failed to check block status for ${phoneNumber}:`, error);
+        setBlockedNumbers((prev) => ({ ...prev, [phoneNumber]: false }));
+      }
     }
     setSelectedPhoneNumber(phoneNumber);
   };
@@ -512,6 +556,7 @@ export default function MessagingInterface() {
       setConversations([]);
       setMessages({});
       setSelectedPhoneNumber(null);
+      setBlockedNumbers({});
 
       // Clean up all WebSocket subscriptions
       Object.values(unsubscribeRefs.current).forEach((unsubscribe) => unsubscribe());
@@ -525,6 +570,36 @@ export default function MessagingInterface() {
     } catch (error: any) {
       console.error('Failed to delete all conversations:', error);
       alert(`Failed to delete all conversations: ${error.message}`);
+    }
+  };
+
+  const handleBlockUser = async (phoneNumber: string) => {
+    if (blockingInProgress === phoneNumber) return;
+    
+    setBlockingInProgress(phoneNumber);
+    try {
+      await smsApiClient.blockUser(phoneNumber);
+      setBlockedNumbers((prev) => ({ ...prev, [phoneNumber]: true }));
+    } catch (error: any) {
+      console.error('Failed to block user:', error);
+      alert(`Failed to block user: ${error.message}`);
+    } finally {
+      setBlockingInProgress(null);
+    }
+  };
+
+  const handleUnblockUser = async (phoneNumber: string) => {
+    if (blockingInProgress === phoneNumber) return;
+    
+    setBlockingInProgress(phoneNumber);
+    try {
+      await smsApiClient.unblockUser(phoneNumber);
+      setBlockedNumbers((prev) => ({ ...prev, [phoneNumber]: false }));
+    } catch (error: any) {
+      console.error('Failed to unblock user:', error);
+      alert(`Failed to unblock user: ${error.message}`);
+    } finally {
+      setBlockingInProgress(null);
     }
   };
 
@@ -598,7 +673,49 @@ export default function MessagingInterface() {
           setShowProfileDialog(true);
         }}
         messages={messages}
+        blockedNumbers={blockedNumbers}
       />
+
+      {/* Blocked User Modal */}
+      {showBlockedModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <Ban className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">User is Blocked</h3>
+                <p className="text-sm text-gray-600">This number has been blocked</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              You cannot send messages to this number because it has been blocked. 
+              Unblock the user to resume messaging.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBlockedModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+              {selectedPhoneNumber && (
+                <button
+                  onClick={async () => {
+                    await handleUnblockUser(selectedPhoneNumber);
+                    setShowBlockedModal(false);
+                  }}
+                  disabled={blockingInProgress === selectedPhoneNumber}
+                  className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {blockingInProgress === selectedPhoneNumber ? 'Unblocking...' : 'Unblock User'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col">
@@ -609,9 +726,36 @@ export default function MessagingInterface() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Phone className="w-5 h-5 text-blue-600" />
-                  <span className="font-semibold">{selectedPhoneNumber}</span>
+                  <span className={`font-semibold ${blockedNumbers[selectedPhoneNumber] ? 'text-red-600' : ''}`}>
+                    {selectedPhoneNumber}
+                  </span>
+                  {blockedNumbers[selectedPhoneNumber] && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                      <Ban className="w-3 h-3" />
+                      Blocked
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {blockedNumbers[selectedPhoneNumber] ? (
+                    <button
+                      onClick={() => handleUnblockUser(selectedPhoneNumber)}
+                      disabled={blockingInProgress === selectedPhoneNumber}
+                      className="p-2 rounded-lg text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
+                      title="Unblock User"
+                    >
+                      <Unlock className="w-5 h-5" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleBlockUser(selectedPhoneNumber)}
+                      disabled={blockingInProgress === selectedPhoneNumber}
+                      className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      title="Block User"
+                    >
+                      <Ban className="w-5 h-5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setProfilePhoneNumber(selectedPhoneNumber);
@@ -683,25 +827,32 @@ export default function MessagingInterface() {
 
             {/* Input */}
             <div className="border-t p-4 bg-gray-50">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Type a message..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={sending}
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={sending || !newMessage.trim()}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  {sending ? 'Sending...' : 'Send'}
-                </button>
-              </div>
+              {blockedNumbers[selectedPhoneNumber] ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
+                  <Ban className="w-5 h-5 text-red-600" />
+                  <span className="text-sm text-red-700">This user is blocked. Unblock to send messages.</span>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                    placeholder="Type a message..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={sending}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={sending || !newMessage.trim()}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    {sending ? 'Sending...' : 'Send'}
+                  </button>
+                </div>
+              )}
             </div>
           </>
         ) : (
